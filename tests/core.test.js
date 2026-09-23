@@ -8,8 +8,33 @@ const {
   normalizeVideoTitle,
   parseArtistTitle,
   rankSuggestions,
-  sanitizeLyrics
+  sanitizeLyrics,
+  waitForChangedValue
 } = require('../core.js');
+
+test('waitForChangedValue ignores stale YouTube metadata after navigation', async () => {
+  const values = ['Old Artist - Old Song', 'Old Artist - Old Song', 'New Artist - New Song'];
+  let index = 0;
+
+  const result = await waitForChangedValue(
+    () => values[Math.min(index++, values.length - 1)],
+    'Old Artist - Old Song',
+    { attempts: 4, wait: async () => {} }
+  );
+
+  assert.equal(result, 'New Artist - New Song');
+  assert.equal(index, 3);
+});
+
+test('waitForChangedValue does not return stale metadata after timing out', async () => {
+  const result = await waitForChangedValue(
+    () => 'Old Artist - Old Song',
+    'Old Artist - Old Song',
+    { attempts: 2, wait: async () => {} }
+  );
+
+  assert.equal(result, '');
+});
 
 test('calculatePanelRect moves the panel and keeps it inside the viewport', () => {
   assert.deepEqual(

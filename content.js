@@ -20,8 +20,10 @@
   let visible = false;
   let loading = false;
   let lastVideoKey = '';
+  let lastDetectedQuery = '';
   let lastLoadedQuery = '';
   let navigationTimer = null;
+  let navigationSerial = 0;
   let requestSerial = 0;
   let panelGeometryRestored = false;
   let geometrySaveTimer = null;
@@ -548,7 +550,10 @@
 
     const key = videoKey();
     const query = detectSongQuery();
-    if (query) queryInput.value = query;
+    if (query) {
+      lastDetectedQuery = query;
+      queryInput.value = query;
+    }
 
     const videoChanged = key !== lastVideoKey;
     if (videoChanged || !lyricsNode.textContent) {
@@ -571,18 +576,41 @@
 
   function handleNavigation() {
     clearTimeout(navigationTimer);
-    navigationTimer = setTimeout(() => {
+    navigationTimer = setTimeout(async () => {
       if (!visible) return;
       const key = videoKey();
       if (key === lastVideoKey) return;
 
+      const navigationId = ++navigationSerial;
+      const previousQuery = lastDetectedQuery || detectSongQuery();
       lastVideoKey = key;
       lastLoadedQuery = '';
+      requestSerial += 1;
+      setLoading(false);
+      queryInput.value = '';
+      resultNode.hidden = true;
+      songNode.textContent = '';
       lyricsNode.textContent = '';
-      const query = detectSongQuery();
+      sourceNode.textContent = 'Источники: lyrics.ovh → Genius → LRCLIB';
+      copyButton.hidden = true;
+      setStatus('Определяю новую песню…');
+
+      const query = await LyricsCore.waitForChangedValue(
+        detectSongQuery,
+        previousQuery,
+        { attempts: 30, intervalMs: 200 }
+      );
+
+      if (!visible || navigationId !== navigationSerial || key !== videoKey()) return;
+      if (!query) {
+        setStatus('Не удалось определить новую песню. Введите её вручную.', true);
+        return;
+      }
+
+      lastDetectedQuery = query;
       queryInput.value = query;
       search(query, true);
-    }, 700);
+    }, 150);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

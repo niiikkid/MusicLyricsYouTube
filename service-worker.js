@@ -4,7 +4,7 @@ const LYRICS_OVH_API_ROOT = 'https://api.lyrics.ovh';
 const GENIUS_API_ROOT = 'https://genius.com/api';
 const LRCLIB_API_ROOT = 'https://lrclib.net/api';
 const LRCLIB_CLIENT =
-  'MusicLyricsYouTube v1.3.0 (https://github.com/niiikkid/MusicLyricsYouTube)';
+  'MusicLyricsYouTube v1.3.1 (https://github.com/niiikkid/MusicLyricsYouTube)';
 const SUPPORTED_HOSTS = new Set([
   'youtube.com',
   'www.youtube.com',

@@ -112,6 +112,24 @@
     return { left, top, width: right - left, height: bottom - top };
   }
 
+  async function waitForChangedValue(readValue, previousValue, options = {}) {
+    const attempts = Math.max(1, Number(options.attempts) || 20);
+    const intervalMs = Math.max(0, Number(options.intervalMs) || 200);
+    const wait =
+      options.wait ||
+      ((delay) => new Promise((resolve) => setTimeout(resolve, delay)));
+    const previous = String(previousValue || '').trim();
+    let latest = '';
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      latest = String((await readValue()) || '').trim();
+      if (latest && latest !== previous) return latest;
+      if (attempt < attempts - 1) await wait(intervalMs);
+    }
+
+    return '';
+  }
+
   function normalizeVideoTitle(value) {
     return String(value || '')
       .replace(/\s+-\s+YouTube\s*$/i, '')
@@ -260,6 +278,7 @@
     normalizeVideoTitle,
     parseArtistTitle,
     rankSuggestions,
-    sanitizeLyrics
+    sanitizeLyrics,
+    waitForChangedValue
   };
 });
