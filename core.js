@@ -108,9 +108,40 @@
       .map(({ artist, title }) => ({ artist, title }));
   }
 
+  function sanitizeLyrics(value) {
+    const lines = String(value || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\u00A0/g, ' ')
+      .split('\n')
+      .map((line) => line.replace(/[ \t]+$/g, ''));
+    const repaired = [];
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const next = lines[index + 1];
+      const quoteCount = (line.match(/"/g) || []).length;
+      const nextQuoteCount = (next?.match(/"/g) || []).length;
+      const hasOpenQuote =
+        quoteCount % 2 === 1 && !/"\s*(?:\([^)]*\))?\s*$/.test(line);
+      const nextClosesQuote =
+        Boolean(next) && next.indexOf('"') > 0 && nextQuoteCount % 2 === 1;
+
+      if (hasOpenQuote && nextClosesQuote) {
+        repaired.push(`${line.trimEnd()} ${next.trimStart()}`);
+        index += 1;
+      } else {
+        repaired.push(line);
+      }
+    }
+
+    return repaired.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   return {
     normalizeVideoTitle,
     parseArtistTitle,
-    rankSuggestions
+    rankSuggestions,
+    sanitizeLyrics
   };
 });

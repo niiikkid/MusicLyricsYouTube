@@ -91,7 +91,7 @@ async function requestLyrics(artist, title) {
     throw new Error(`lyrics-api-${response.status}`);
   }
 
-  const lyrics = String(response.data?.lyrics || '').trim();
+  const lyrics = LyricsCore.sanitizeLyrics(response.data?.lyrics);
   if (lyrics.length < 20) return null;
 
   return { artist, title, lyrics };

@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const {
   normalizeVideoTitle,
   parseArtistTitle,
-  rankSuggestions
+  rankSuggestions,
+  sanitizeLyrics
 } = require('../core.js');
 
 test('normalizeVideoTitle removes YouTube suffix and common video labels', () => {
@@ -55,4 +56,13 @@ test('rankSuggestions favors the matching artist over a higher-ranked cover', ()
     artist: 'The Weeknd',
     title: 'Blinding Lights'
   });
+});
+
+test('sanitizeLyrics cleans technical whitespace and repairs a quote split across lines', () => {
+  const raw = '\uFEFFFirst line  \r\nSecond\u00a0line\r\n\r\n\r\n"My, oh, my\r\nBaby, this my kind of night"\u200B';
+
+  assert.equal(
+    sanitizeLyrics(raw),
+    'First line\nSecond line\n\n"My, oh, my Baby, this my kind of night"'
+  );
 });
