@@ -280,6 +280,9 @@
       event.preventDefault();
       search(queryInput.value, true);
     });
+    for (const eventName of ['keydown', 'keypress', 'keyup']) {
+      panel.addEventListener(eventName, (event) => event.stopPropagation());
+    }
     copyButton.addEventListener('click', copyLyrics);
   }
 
