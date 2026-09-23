@@ -1,9 +1,10 @@
 importScripts('core.js');
 
 const LYRICS_OVH_API_ROOT = 'https://api.lyrics.ovh';
+const GENIUS_API_ROOT = 'https://genius.com/api';
 const LRCLIB_API_ROOT = 'https://lrclib.net/api';
 const LRCLIB_CLIENT =
-  'MusicLyricsYouTube v1.1.0 (https://github.com/niiikkid/MusicLyricsYouTube)';
+  'MusicLyricsYouTube v1.2.0 (https://github.com/niiikkid/MusicLyricsYouTube)';
 const SUPPORTED_HOSTS = new Set([
   'youtube.com',
   'www.youtube.com',
@@ -84,6 +85,22 @@ async function fetchJson(url, headers = {}) {
   }
 }
 
+async function fetchText(url, headers = {}) {
+  const timeout = timeoutSignal(12000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'text/html,*/*', ...headers },
+      signal: timeout.signal
+    });
+    const data = await response.text().catch(() => '');
+    return { ok: response.ok, status: response.status, data };
+  } finally {
+    timeout.cancel();
+  }
+}
+
 async function requestLyricsOvh(artist, title) {
   const url =
     `${LYRICS_OVH_API_ROOT}/v1/${encodeURIComponent(artist)}/` +
@@ -137,6 +154,159 @@ async function findLyricsOvh(query) {
   for (const candidate of candidates.slice(parsed ? 1 : 0, 6)) {
     const found = await requestLyricsOvh(candidate.artist, candidate.title);
     if (found) return found;
+  }
+
+  return null;
+}
+
+function decodeHtmlEntities(value) {
+  const named = {
+    amp: '&',
+    apos: "'",
+    gt: '>',
+    lt: '<',
+    nbsp: ' ',
+    quot: '"'
+  };
+
+  return String(value || '').replace(
+    /&(#x[\da-f]+|#\d+|amp|apos|gt|lt|nbsp|quot);/gi,
+    (match, entity) => {
+      if (entity[0] !== '#') return named[entity.toLowerCase()] || match;
+      const hexadecimal = entity[1].toLowerCase() === 'x';
+      const codePoint = Number.parseInt(
+        entity.slice(hexadecimal ? 2 : 1),
+        hexadecimal ? 16 : 10
+      );
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+  );
+}
+
+function geniusFragmentToText(fragment) {
+  const output = [];
+  const stack = [{ name: '', excluded: false }];
+  const tokens = String(fragment || '').match(/<!--[\s\S]*?-->|<[^>]+>|[^<]+/g) || [];
+  const blockTags = new Set(['div', 'p', 'section']);
+  const voidTags = new Set(['br', 'hr', 'img', 'input', 'meta', 'link']);
+
+  for (const token of tokens) {
+    if (!token.startsWith('<')) {
+      if (!stack[stack.length - 1].excluded) output.push(decodeHtmlEntities(token));
+      continue;
+    }
+    if (token.startsWith('<!--')) continue;
+
+    const closing = /^<\s*\//.test(token);
+    const nameMatch = token.match(/^<\s*\/?\s*([a-z0-9-]+)/i);
+    if (!nameMatch) continue;
+    const name = nameMatch[1].toLowerCase();
+
+    if (closing) {
+      let index = stack.length - 1;
+      while (index > 0 && stack[index].name !== name) index -= 1;
+      const closed = stack[index];
+      stack.length = Math.max(1, index);
+      if (blockTags.has(name) && !closed.excluded) output.push('\n');
+      continue;
+    }
+
+    const excluded =
+      stack[stack.length - 1].excluded ||
+      /\bdata-exclude-from-selection=(?:"true"|'true')/i.test(token) ||
+      name === 'script' ||
+      name === 'style';
+
+    if (name === 'br' && !excluded) output.push('\n');
+    if (!voidTags.has(name) && !/\/\s*>$/.test(token)) {
+      stack.push({ name, excluded });
+    }
+  }
+
+  return output.join('');
+}
+
+function extractGeniusLyrics(html) {
+  const source = String(html || '');
+  const texts = [];
+  const openingPattern =
+    /<div\b[^>]*\bdata-lyrics-container=(?:"true"|'true')[^>]*>/gi;
+  let opening;
+
+  while ((opening = openingPattern.exec(source))) {
+    const contentStart = openingPattern.lastIndex;
+    const divPattern = /<\/?div\b[^>]*>/gi;
+    divPattern.lastIndex = contentStart;
+    let depth = 1;
+    let closing;
+
+    while ((closing = divPattern.exec(source))) {
+      depth += /^<\s*\//.test(closing[0]) ? -1 : 1;
+      if (depth !== 0) continue;
+
+      const text = LyricsCore.sanitizeLyrics(
+        geniusFragmentToText(source.slice(contentStart, closing.index))
+      );
+      if (text && !texts.includes(text)) texts.push(text);
+      openingPattern.lastIndex = divPattern.lastIndex;
+      break;
+    }
+  }
+
+  return LyricsCore.sanitizeLyrics(texts.join('\n'));
+}
+
+function isGeniusLyricsUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'genius.com';
+  } catch {
+    return false;
+  }
+}
+
+async function findLyricsGenius(query) {
+  const response = await fetchJson(
+    `${GENIUS_API_ROOT}/search/song?q=${encodeURIComponent(query)}`,
+    { Accept: 'application/json, text/plain, */*' }
+  );
+  if (!response.ok) throw new Error(`genius-search-${response.status}`);
+
+  const hits = (response.data?.response?.sections || [])
+    .flatMap((section) => (Array.isArray(section?.hits) ? section.hits : []))
+    .filter((hit) => hit?.type === 'song')
+    .map((hit) => ({
+      artist: String(hit.result?.primary_artist?.name || '').trim(),
+      title: String(hit.result?.title || '').trim(),
+      url: String(hit.result?.url || '')
+    }))
+    .filter((item) => item.artist && item.title && isGeniusLyricsUrl(item.url));
+
+  const hitsByKey = new Map(
+    hits.map((item) => [lyricsCandidateKey(item.artist, item.title), item])
+  );
+  const ranked = LyricsCore.rankSuggestions(
+    query,
+    hits.map((item) => ({
+      artist: { name: item.artist },
+      title_short: item.title
+    }))
+  );
+
+  for (const candidate of ranked.slice(0, 3)) {
+    const hit = hitsByKey.get(lyricsCandidateKey(candidate.artist, candidate.title));
+    if (!hit) continue;
+
+    const page = await fetchText(hit.url);
+    if (!page.ok) {
+      if (page.status === 404) continue;
+      throw new Error(`genius-page-${page.status}`);
+    }
+
+    const lyrics = extractGeniusLyrics(page.data);
+    if (lyrics.length >= 20) {
+      return { artist: hit.artist, title: hit.title, lyrics, source: 'Genius' };
+    }
   }
 
   return null;
@@ -197,10 +367,11 @@ async function findLyrics(rawQuery) {
     return resultCache.get(cacheKey);
   }
 
+  const providers = [findLyricsOvh, findLyricsGenius, findLyricsLrclib];
   const providerErrors = [];
   const found = await LyricsCore.findLyricsWithProviders(
     query,
-    [findLyricsOvh, findLyricsLrclib],
+    providers,
     (error) => providerErrors.push(error)
   );
 
@@ -214,7 +385,7 @@ async function findLyrics(rawQuery) {
     console.warn('Lyrics provider failed:', error);
   }
 
-  if (providerErrors.length === 2) {
+  if (providerErrors.length === providers.length) {
     if (providerErrors.some((error) => error?.name === 'AbortError')) {
       return { ok: false, error: 'Сервисы долго не отвечают. Попробуйте ещё раз.' };
     }

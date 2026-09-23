@@ -260,7 +260,7 @@
           <pre class="lyrics"></pre>
         </div>
         <footer class="footer">
-          <span class="source">Источники: lyrics.ovh → LRCLIB</span>
+          <span class="source">Источники: lyrics.ovh → Genius → LRCLIB</span>
           <button class="copy" type="button" hidden>Копировать</button>
         </footer>
       </section>
@@ -316,7 +316,7 @@
     resultNode.hidden = true;
     songNode.textContent = '';
     lyricsNode.textContent = '';
-    sourceNode.textContent = 'Источники: lyrics.ovh → LRCLIB';
+    sourceNode.textContent = 'Источники: lyrics.ovh → Genius → LRCLIB';
     copyButton.hidden = true;
 
     try {

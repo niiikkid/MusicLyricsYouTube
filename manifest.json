@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Lyrics — текст песни",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Показывает текст текущей песни поверх YouTube и YouTube Music.",
   "minimum_chrome_version": "102",
   "permissions": [
@@ -10,6 +10,7 @@
   ],
   "host_permissions": [
     "https://api.lyrics.ovh/*",
+    "https://genius.com/*",
     "https://lrclib.net/*"
   ],
   "background": {
