@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  findLyricsWithProviders,
   normalizeVideoTitle,
   parseArtistTitle,
   rankSuggestions,
@@ -65,4 +66,55 @@ test('sanitizeLyrics cleans technical whitespace and repairs a quote split acros
     sanitizeLyrics(raw),
     'First line\nSecond line\n\n"My, oh, my Baby, this my kind of night"'
   );
+});
+
+test('findLyricsWithProviders keeps the configured provider order', async () => {
+  const calls = [];
+  const result = await findLyricsWithProviders('Artist - Song', [
+    async () => {
+      calls.push('primary');
+      return { artist: 'Artist', title: 'Song', lyrics: 'Primary lyrics' };
+    },
+    async () => {
+      calls.push('fallback');
+      return { artist: 'Artist', title: 'Song', lyrics: 'Fallback lyrics' };
+    }
+  ]);
+
+  assert.deepEqual(calls, ['primary']);
+  assert.equal(result.lyrics, 'Primary lyrics');
+});
+
+test('findLyricsWithProviders continues after a provider error', async () => {
+  const errors = [];
+  const result = await findLyricsWithProviders(
+    'Artist - Song',
+    [
+      async () => {
+        throw new Error('primary unavailable');
+      },
+      async () => ({ artist: 'Artist', title: 'Song', lyrics: 'Fallback lyrics' })
+    ],
+    (error) => errors.push(error.message)
+  );
+
+  assert.deepEqual(errors, ['primary unavailable']);
+  assert.equal(result.lyrics, 'Fallback lyrics');
+});
+
+test('findLyricsWithProviders continues when a provider has no result', async () => {
+  const calls = [];
+  const result = await findLyricsWithProviders('Artist - Song', [
+    async () => {
+      calls.push('primary');
+      return null;
+    },
+    async () => {
+      calls.push('fallback');
+      return { artist: 'Artist', title: 'Song', lyrics: 'Fallback lyrics' };
+    }
+  ]);
+
+  assert.deepEqual(calls, ['primary', 'fallback']);
+  assert.equal(result.lyrics, 'Fallback lyrics');
 });

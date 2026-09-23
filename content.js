@@ -13,6 +13,7 @@
   let resultNode = null;
   let songNode = null;
   let lyricsNode = null;
+  let sourceNode = null;
   let copyButton = null;
   let visible = false;
   let loading = false;
@@ -259,7 +260,7 @@
           <pre class="lyrics"></pre>
         </div>
         <footer class="footer">
-          <span>Источник: lyrics.ovh</span>
+          <span class="source">Источники: lyrics.ovh → LRCLIB</span>
           <button class="copy" type="button" hidden>Копировать</button>
         </footer>
       </section>
@@ -273,6 +274,7 @@
     resultNode = shadow.querySelector('.result');
     songNode = shadow.querySelector('.song');
     lyricsNode = shadow.querySelector('.lyrics');
+    sourceNode = shadow.querySelector('.source');
     copyButton = shadow.querySelector('.copy');
 
     shadow.querySelector('.close').addEventListener('click', hidePanel);
@@ -314,6 +316,7 @@
     resultNode.hidden = true;
     songNode.textContent = '';
     lyricsNode.textContent = '';
+    sourceNode.textContent = 'Источники: lyrics.ovh → LRCLIB';
     copyButton.hidden = true;
 
     try {
@@ -332,6 +335,7 @@
       songNode.textContent = `${response.artist} — ${response.title}`;
       lyricsNode.textContent = response.lyrics;
       lyricsNode.scrollTop = 0;
+      sourceNode.textContent = `Источник: ${response.source || 'lyrics.ovh'}`;
       resultNode.hidden = false;
       copyButton.hidden = false;
       setStatus('');

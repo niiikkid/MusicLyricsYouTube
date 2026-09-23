@@ -138,7 +138,20 @@
     return repaired.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
+  async function findLyricsWithProviders(query, providers, onError = () => {}) {
+    for (const provider of providers) {
+      try {
+        const result = await provider(query);
+        if (result) return result;
+      } catch (error) {
+        onError(error);
+      }
+    }
+    return null;
+  }
+
   return {
+    findLyricsWithProviders,
     normalizeVideoTitle,
     parseArtistTitle,
     rankSuggestions,

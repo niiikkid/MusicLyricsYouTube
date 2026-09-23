@@ -8,6 +8,7 @@ A lightweight Chrome extension that shows lyrics for the current song directly o
 - Shows lyrics in a clean floating panel without leaving the page.
 - Updates automatically when YouTube opens the next video.
 - Supports manual search when the detected artist or title is incorrect.
+- Tries lyrics.ovh first and automatically falls back to LRCLIB when needed.
 - Cleans common video labels and minor formatting issues in lyric text.
 - Lets you copy the full lyrics with one click.
 - Works without an account or API key.
@@ -39,9 +40,9 @@ Click the extension icon again to hide the panel.
 
 ## How it works
 
-The extension uses Chrome Manifest V3 and runs only after you click its toolbar icon. It reads the current video title, searches the public lyrics.ovh API, cleans small formatting artifacts, and displays the result inside an isolated panel on the page.
+The extension uses Chrome Manifest V3 and runs only after you click its toolbar icon. It reads the current video title, searches lyrics.ovh first, and then tries LRCLIB if the primary lookup does not return lyrics. The lyrics.ovh service is itself an aggregator of several lyrics websites, so the extension now combines that existing broad search with an independent fallback catalog.
 
-The requested permissions are limited to the active tab, script injection, and access to the lyrics.ovh API.
+The requested permissions are limited to the active tab, script injection, and access to the lyrics.ovh and LRCLIB APIs.
 
 ## Development
 
@@ -57,5 +58,6 @@ This project was built with these open-source projects as its main references:
 
 - [NTag/lyrics.ovh](https://github.com/NTag/lyrics.ovh) — provides the public lyrics search API used by this extension.
 - [Varal7/lyrics-chrome-extension](https://github.com/Varal7/lyrics-chrome-extension) — the original Chrome extension concept for displaying lyrics from YouTube videos.
+- [LRCLIB](https://lrclib.net/) — provides the independent fallback lyrics catalog.
 
 MusicLyricsYouTube is an independent Manifest V3 implementation and is not affiliated with YouTube, Google, or the referenced projects.
