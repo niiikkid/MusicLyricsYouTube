@@ -1,0 +1,9 @@
+{
+  "name": "youtube-lyrics-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Локальное Chrome-расширение для показа текста текущей песни на YouTube.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
