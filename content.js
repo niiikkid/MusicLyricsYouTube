@@ -5,6 +5,8 @@
   globalThis.__youtubeLyricsInjected = true;
 
   const HOST_ID = 'youtube-lyrics-local-host';
+  const PANEL_STORAGE_KEY = 'youtubeLyricsPanelRect';
+  const PANEL_LIMITS = { margin: 8, minWidth: 300, minHeight: 240 };
   let host = null;
   let shadow = null;
   let panel = null;
@@ -21,6 +23,8 @@
   let lastLoadedQuery = '';
   let navigationTimer = null;
   let requestSerial = 0;
+  let panelGeometryRestored = false;
+  let geometrySaveTimer = null;
 
   const STYLE = `
     :host {
@@ -51,13 +55,17 @@
       backdrop-filter: blur(18px);
       font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
+    .panel.interacting { user-select: none; }
     .header {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 14px 14px 10px 16px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+      cursor: grab;
+      touch-action: none;
     }
+    .panel.dragging .header { cursor: grabbing; }
     .mark {
       display: grid;
       place-items: center;
@@ -174,6 +182,46 @@
       font-size: 12px;
     }
     .copy:hover { background: #3f3f46; }
+    .resize-handle {
+      position: absolute;
+      z-index: 3;
+      touch-action: none;
+    }
+    .resize-n, .resize-s {
+      left: 12px;
+      width: calc(100% - 24px);
+      height: 8px;
+      cursor: ns-resize;
+    }
+    .resize-n { top: 0; }
+    .resize-s { bottom: 0; }
+    .resize-e, .resize-w {
+      top: 12px;
+      width: 8px;
+      height: calc(100% - 24px);
+      cursor: ew-resize;
+    }
+    .resize-e { right: 0; }
+    .resize-w { left: 0; }
+    .resize-ne, .resize-nw, .resize-se, .resize-sw {
+      width: 16px;
+      height: 16px;
+    }
+    .resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+    .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+    .resize-se { right: 0; bottom: 0; cursor: nwse-resize; }
+    .resize-sw { left: 0; bottom: 0; cursor: nesw-resize; }
+    .resize-se::after {
+      content: '';
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      width: 6px;
+      height: 6px;
+      border-right: 2px solid rgba(255, 255, 255, 0.34);
+      border-bottom: 2px solid rgba(255, 255, 255, 0.34);
+      border-radius: 0 0 2px;
+    }
     @media (max-width: 620px) {
       .panel {
         top: 64px;
@@ -230,6 +278,111 @@
     return url.searchParams.get('v') || `${url.pathname}|${document.title}`;
   }
 
+  function viewportSize() {
+    return { width: window.innerWidth, height: window.innerHeight };
+  }
+
+  function panelRect() {
+    const rect = panel.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+  }
+
+  function applyPanelRect(rect) {
+    panel.style.left = `${Math.round(rect.left)}px`;
+    panel.style.top = `${Math.round(rect.top)}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.width = `${Math.round(rect.width)}px`;
+    panel.style.height = `${Math.round(rect.height)}px`;
+  }
+
+  function savePanelRect(rect) {
+    clearTimeout(geometrySaveTimer);
+    const storedRect = Object.fromEntries(
+      Object.entries(rect).map(([key, value]) => [key, Math.round(value)])
+    );
+
+    geometrySaveTimer = setTimeout(() => {
+      try {
+        const request = chrome.storage.local.set({ [PANEL_STORAGE_KEY]: storedRect });
+        request?.catch?.(() => {});
+      } catch {
+        // The extension may have been reloaded while the page stayed open.
+      }
+    }, 120);
+  }
+
+  function fitPanelToViewport(shouldSave = false) {
+    if (!panel || panel.hidden) return;
+    const fitted = LyricsCore.fitPanelRect(panelRect(), viewportSize(), PANEL_LIMITS);
+    applyPanelRect(fitted);
+    if (shouldSave) savePanelRect(fitted);
+  }
+
+  async function restorePanelRect() {
+    if (panelGeometryRestored) {
+      fitPanelToViewport();
+      return;
+    }
+    panelGeometryRestored = true;
+
+    try {
+      const stored = await chrome.storage.local.get(PANEL_STORAGE_KEY);
+      const savedRect = stored?.[PANEL_STORAGE_KEY];
+      if (savedRect) {
+        applyPanelRect(
+          LyricsCore.fitPanelRect(savedRect, viewportSize(), PANEL_LIMITS)
+        );
+        return;
+      }
+    } catch {
+      // Keep the default position if storage is unavailable.
+    }
+
+    fitPanelToViewport();
+  }
+
+  function startPanelInteraction(event, direction) {
+    if (event.button !== 0 || !event.isPrimary) return;
+    if (direction === 'move' && event.target.closest('button, input')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const target = event.currentTarget;
+    const start = panelRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    panel.classList.add('interacting', direction === 'move' ? 'dragging' : 'resizing');
+    target.setPointerCapture(event.pointerId);
+
+    const move = (moveEvent) => {
+      if (moveEvent.pointerId !== event.pointerId) return;
+      const next = LyricsCore.calculatePanelRect(
+        start,
+        moveEvent.clientX - startX,
+        moveEvent.clientY - startY,
+        direction,
+        viewportSize(),
+        PANEL_LIMITS
+      );
+      applyPanelRect(next);
+    };
+
+    const finish = (finishEvent) => {
+      if (finishEvent.pointerId !== event.pointerId) return;
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', finish);
+      target.removeEventListener('pointercancel', finish);
+      panel.classList.remove('interacting', 'dragging', 'resizing');
+      savePanelRect(panelRect());
+    };
+
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', finish);
+    target.addEventListener('pointercancel', finish);
+  }
+
   function buildPanel() {
     if (host?.isConnected && panel) return;
 
@@ -242,7 +395,7 @@
     shadow.innerHTML = `
       <style>${STYLE}</style>
       <section class="panel" hidden aria-label="Текст песни">
-        <header class="header">
+        <header class="header" title="Перетащите, чтобы переместить окно">
           <div class="mark">L</div>
           <div class="heading">
             <div class="eyebrow">YouTube Lyrics</div>
@@ -263,6 +416,14 @@
           <span class="source">Источники: lyrics.ovh → Genius → LRCLIB</span>
           <button class="copy" type="button" hidden>Копировать</button>
         </footer>
+        <div class="resize-handle resize-n" data-resize="n" aria-hidden="true"></div>
+        <div class="resize-handle resize-e" data-resize="e" aria-hidden="true"></div>
+        <div class="resize-handle resize-s" data-resize="s" aria-hidden="true"></div>
+        <div class="resize-handle resize-w" data-resize="w" aria-hidden="true"></div>
+        <div class="resize-handle resize-ne" data-resize="ne" aria-hidden="true"></div>
+        <div class="resize-handle resize-nw" data-resize="nw" aria-hidden="true"></div>
+        <div class="resize-handle resize-se" data-resize="se" aria-hidden="true"></div>
+        <div class="resize-handle resize-sw" data-resize="sw" aria-hidden="true"></div>
       </section>
     `;
 
@@ -277,6 +438,14 @@
     sourceNode = shadow.querySelector('.source');
     copyButton = shadow.querySelector('.copy');
 
+    shadow
+      .querySelector('.header')
+      .addEventListener('pointerdown', (event) => startPanelInteraction(event, 'move'));
+    for (const handle of shadow.querySelectorAll('[data-resize]')) {
+      handle.addEventListener('pointerdown', (event) =>
+        startPanelInteraction(event, handle.dataset.resize)
+      );
+    }
     shadow.querySelector('.close').addEventListener('click', hidePanel);
     shadow.querySelector('.search').addEventListener('submit', (event) => {
       event.preventDefault();
@@ -367,6 +536,7 @@
     if (!host) return;
     const target = document.fullscreenElement || document.body || document.documentElement;
     if (target && host.parentNode !== target) target.appendChild(host);
+    requestAnimationFrame(() => fitPanelToViewport());
   }
 
   function showPanel() {
@@ -374,6 +544,7 @@
     visible = true;
     panel.hidden = false;
     moveIntoFullscreen();
+    void restorePanelRect();
 
     const key = videoKey();
     const query = detectSongQuery();
@@ -430,4 +601,5 @@
   document.addEventListener('yt-navigate-finish', handleNavigation, true);
   document.addEventListener('fullscreenchange', moveIntoFullscreen);
   window.addEventListener('popstate', handleNavigation);
+  window.addEventListener('resize', () => fitPanelToViewport(true));
 })();

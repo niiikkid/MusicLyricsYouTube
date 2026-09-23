@@ -9,6 +9,109 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  function clamp(value, minimum, maximum) {
+    return Math.min(Math.max(value, minimum), maximum);
+  }
+
+  function panelLimits(viewport, options = {}) {
+    const margin = Math.max(0, Number(options.margin) || 8);
+    const viewportWidth = Math.max(0, Number(viewport?.width) || 0);
+    const viewportHeight = Math.max(0, Number(viewport?.height) || 0);
+    const maximumWidth = Math.max(0, viewportWidth - margin * 2);
+    const maximumHeight = Math.max(0, viewportHeight - margin * 2);
+
+    return {
+      margin,
+      maximumWidth,
+      maximumHeight,
+      minimumWidth: Math.min(Math.max(0, Number(options.minWidth) || 300), maximumWidth),
+      minimumHeight: Math.min(Math.max(0, Number(options.minHeight) || 240), maximumHeight)
+    };
+  }
+
+  function fitPanelRect(rect, viewport, options = {}) {
+    const limits = panelLimits(viewport, options);
+    const width = clamp(
+      Number(rect?.width) || limits.minimumWidth,
+      limits.minimumWidth,
+      limits.maximumWidth
+    );
+    const height = clamp(
+      Number(rect?.height) || limits.minimumHeight,
+      limits.minimumHeight,
+      limits.maximumHeight
+    );
+    const maximumLeft = limits.margin + limits.maximumWidth - width;
+    const maximumTop = limits.margin + limits.maximumHeight - height;
+
+    return {
+      left: clamp(Number(rect?.left) || limits.margin, limits.margin, maximumLeft),
+      top: clamp(Number(rect?.top) || limits.margin, limits.margin, maximumTop),
+      width,
+      height
+    };
+  }
+
+  function calculatePanelRect(
+    startRect,
+    deltaX,
+    deltaY,
+    direction,
+    viewport,
+    options = {}
+  ) {
+    const limits = panelLimits(viewport, options);
+    const start = fitPanelRect(startRect, viewport, options);
+    const dx = Number(deltaX) || 0;
+    const dy = Number(deltaY) || 0;
+
+    if (direction === 'move') {
+      return fitPanelRect(
+        { ...start, left: start.left + dx, top: start.top + dy },
+        viewport,
+        options
+      );
+    }
+
+    const originalRight = start.left + start.width;
+    const originalBottom = start.top + start.height;
+    let left = start.left;
+    let top = start.top;
+    let right = originalRight;
+    let bottom = originalBottom;
+
+    if (direction.includes('w')) {
+      left = clamp(
+        start.left + dx,
+        limits.margin,
+        originalRight - limits.minimumWidth
+      );
+    }
+    if (direction.includes('e')) {
+      right = clamp(
+        originalRight + dx,
+        start.left + limits.minimumWidth,
+        limits.margin + limits.maximumWidth
+      );
+    }
+    if (direction.includes('n')) {
+      top = clamp(
+        start.top + dy,
+        limits.margin,
+        originalBottom - limits.minimumHeight
+      );
+    }
+    if (direction.includes('s')) {
+      bottom = clamp(
+        originalBottom + dy,
+        start.top + limits.minimumHeight,
+        limits.margin + limits.maximumHeight
+      );
+    }
+
+    return { left, top, width: right - left, height: bottom - top };
+  }
+
   function normalizeVideoTitle(value) {
     return String(value || '')
       .replace(/\s+-\s+YouTube\s*$/i, '')
@@ -151,7 +254,9 @@
   }
 
   return {
+    calculatePanelRect,
     findLyricsWithProviders,
+    fitPanelRect,
     normalizeVideoTitle,
     parseArtistTitle,
     rankSuggestions,

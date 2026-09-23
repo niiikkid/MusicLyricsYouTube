@@ -2,12 +2,55 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  calculatePanelRect,
   findLyricsWithProviders,
+  fitPanelRect,
   normalizeVideoTitle,
   parseArtistTitle,
   rankSuggestions,
   sanitizeLyrics
 } = require('../core.js');
+
+test('calculatePanelRect moves the panel and keeps it inside the viewport', () => {
+  assert.deepEqual(
+    calculatePanelRect(
+      { left: 600, top: 70, width: 390, height: 600 },
+      500,
+      -100,
+      'move',
+      { width: 1000, height: 800 }
+    ),
+    { left: 602, top: 8, width: 390, height: 600 }
+  );
+});
+
+test('calculatePanelRect resizes from every edge without crossing minimum size', () => {
+  const viewport = { width: 1200, height: 900 };
+  const start = { left: 400, top: 200, width: 390, height: 500 };
+
+  assert.deepEqual(calculatePanelRect(start, -200, -400, 'nw', viewport), {
+    left: 200,
+    top: 8,
+    width: 590,
+    height: 692
+  });
+  assert.deepEqual(calculatePanelRect(start, -300, -400, 'se', viewport), {
+    left: 400,
+    top: 200,
+    width: 300,
+    height: 240
+  });
+});
+
+test('fitPanelRect restores an oversized saved panel into the current viewport', () => {
+  assert.deepEqual(
+    fitPanelRect(
+      { left: 900, top: 700, width: 700, height: 800 },
+      { width: 1000, height: 700 }
+    ),
+    { left: 292, top: 8, width: 700, height: 684 }
+  );
+});
 
 test('normalizeVideoTitle removes YouTube suffix and common video labels', () => {
   assert.equal(

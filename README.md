@@ -6,6 +6,8 @@ A lightweight Chrome extension that shows lyrics for the current song directly o
 
 - Detects the song from the current YouTube video.
 - Shows lyrics in a clean floating panel without leaving the page.
+- Lets you drag the panel by its header and resize it from any edge or corner.
+- Remembers the panel position and size between page reloads.
 - Updates automatically when YouTube opens the next video.
 - Supports manual search when the detected artist or title is incorrect.
 - Searches lyrics.ovh first, Genius second, and LRCLIB third.
@@ -42,7 +44,7 @@ Click the extension icon again to hide the panel.
 
 The extension uses Chrome Manifest V3 and runs only after you click its toolbar icon. It reads the current video title, searches lyrics.ovh first, then Genius, and finally LRCLIB. The lyrics.ovh service is itself an aggregator of several lyrics websites, while Genius and LRCLIB provide independent fallback catalogs.
 
-The requested permissions are limited to the active tab, script injection, and access to lyrics.ovh, Genius, and LRCLIB.
+The requested permissions are limited to the active tab, script injection, local panel-layout storage, and access to lyrics.ovh, Genius, and LRCLIB.
 
 ## Development
 
